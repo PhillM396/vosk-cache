@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Vosk Model Cache</title>
+<style>
+body{font-family:monospace;background:#0a0a0a;color:#d0d0d0;padding:2rem;max-width:500px;margin:0 auto}
+h2{color:#3ddc84;margin-bottom:1rem}
+.bar{background:#1a1a1a;border-radius:4px;height:8px;margin:1rem 0;overflow:hidden}
+.fill{height:100%;width:0;background:#3ddc84;transition:width .3s}
+#status{color:#ffb300;margin-bottom:.5rem}
+#pct{font-size:2rem;color:#3ddc84;font-weight:bold}
+.done{color:#3ddc84!important}
+.err{color:#cf6679!important}
+</style>
+</head>
+<body>
+<h2>Vosk Model Cache</h2>
+<p>This page downloads and caches the Vosk offline speech model (~40MB).<br>
+Open this page ONCE on internet, then the voice page works offline forever.</p>
+<br>
+<div id="status">Ready to download...</div>
+<div id="pct"></div>
+<div class="bar"><div class="fill" id="fill"></div></div>
+<br>
+<button onclick="startCache()" id="btn" style="padding:12px 24px;background:#3ddc84;border:none;border-radius:6px;font-size:14px;cursor:pointer;font-weight:bold">Download &amp; Cache Model</button>
+<script>
+const MODEL_URL='https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.tar.gz';
+const CACHE_NAME='vosk-model-cache-v1';
+
+async function startCache(){
+  document.getElementById('btn').disabled=true;
+  document.getElementById('btn').textContent='Downloading...';
+  document.getElementById('status').textContent='Connecting...';
+  try{
+    // Check if already cached
+    const cache=await caches.open(CACHE_NAME);
+    const existing=await cache.match(MODEL_URL);
+    if(existing){
+      document.getElementById('status').className='done';
+      document.getElementById('status').textContent='Already cached! Model is ready.';
+      document.getElementById('pct').textContent='100%';
+      document.getElementById('fill').style.width='100%';
+      document.getElementById('btn').textContent='Done';
+      return;
+    }
+
+    // Download with progress
+    const response=await fetch(MODEL_URL);
+    const total=parseInt(response.headers.get('content-length')||'0',10);
+    let loaded=0;
+    const reader=response.body.getReader();
+    const chunks=[];
+
+    document.getElementById('status').textContent='Downloading model...';
+
+    while(true){
+      const {done,value}=await reader.read();
+      if(done)break;
+      chunks.push(value);
+      loaded+=value.length;
+      if(total){
+        const pct=Math.round(loaded/total*100);
+        document.getElementById('fill').style.width=pct+'%';
+        document.getElementById('pct').textContent=pct+'%';
+        document.getElementById('status').textContent='Downloading... '+Math.round(loaded/1024/1024)+'MB of '+Math.round(total/1024/1024)+'MB';
+      }
+    }
+
+    // Reassemble and store in cache
+    document.getElementById('status').textContent='Storing in cache...';
+    const blob=new Blob(chunks);
+    const cachedResponse=new Response(blob,{headers:{'Content-Type':'application/gzip'}});
+    await cache.put(MODEL_URL,cachedResponse);
+
+    document.getElementById('status').className='done';
+    document.getElementById('status').textContent='Done! Model cached successfully. You can now use the voice page offline.';
+    document.getElementById('pct').textContent='100%';
+    document.getElementById('fill').style.width='100%';
+    document.getElementById('btn').textContent='Cached!';
+
+  }catch(e){
+    document.getElementById('status').className='err';
+    document.getElementById('status').textContent='Error: '+e.message;
+    document.getElementById('btn').disabled=false;
+    document.getElementById('btn').textContent='Retry';
+  }
+}
+</script>
+</body>
+</html>
